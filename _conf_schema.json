@@ -1,0 +1,48 @@
+{
+  "enable": {
+    "description": "是否启用正则裁剪功能",
+    "type": "bool",
+    "default": true
+  },
+  "regex_rules": {
+    "description": "按顺序执行的正则替换规则列表",
+    "type": "list",
+    "default": [],
+    "items": {
+      "type": "object",
+      "items": {
+        "pattern": {
+          "description": "正则表达式模式，遵循 Python re 语法",
+          "type": "string"
+        },
+        "replacement": {
+          "description": "替换文本，支持捕获组引用",
+          "type": "string",
+          "default": ""
+        },
+        "flags": {
+          "description": "可选的正则标志，可用值示例: IGNORECASE, MULTILINE",
+          "type": "list",
+          "default": [],
+          "items": {
+            "type": "string",
+            "options": [
+              "IGNORECASE",
+              "MULTILINE",
+              "DOTALL",
+              "VERBOSE",
+              "ASCII",
+              "UNICODE",
+              "LOCALE"
+            ]
+          }
+        },
+        "enabled": {
+          "description": "是否启用该条规则",
+          "type": "bool",
+          "default": true
+        }
+      }
+    }
+  }
+}
