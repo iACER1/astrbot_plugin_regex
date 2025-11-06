@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import json
 from dataclasses import dataclass
 from typing import Iterable, List, Sequence
 
@@ -69,13 +70,31 @@ class RegexCuttingLab(Star):
 
     def _ensure_rules(self) -> None:
         """根据配置构建正则流水线，避免重复编译。"""
-        raw_rules = self.config.get("rules", []) if self.config else []
-        if not isinstance(raw_rules, list):
-            logger.warning(
-                "RegexCuttingLab: `rules` 字段应为列表，实际类型为 %s，已忽略。",
-                type(raw_rules),
-            )
-            raw_rules = []
+        raw_rules: list = []
+        if self.config:
+            # 优先使用 rules_json（JSON 文本），提供更友好的代码编辑器界面
+            rules_json_text = self.config.get("rules_json")
+            if isinstance(rules_json_text, str) and rules_json_text.strip():
+                try:
+                    parsed = json.loads(rules_json_text)
+                    if isinstance(parsed, list):
+                        raw_rules = parsed
+                    else:
+                        logger.warning("RegexCuttingLab: `rules_json` 不是 JSON 数组，已忽略。")
+                except Exception as exc:
+                    logger.error("RegexCuttingLab: 解析 `rules_json` 失败：%s", exc)
+
+            # 兼容旧版 list<object> 规则字段
+            if not raw_rules:
+                legacy_rules = self.config.get("rules", [])
+                if isinstance(legacy_rules, list):
+                    raw_rules = legacy_rules
+                else:
+                    logger.warning(
+                        "RegexCuttingLab: `rules` 字段应为列表，实际类型为 %s，已忽略。",
+                        type(legacy_rules),
+                    )
+                    raw_rules = []
 
         signature: List[tuple] = []
         candidates: List[RuntimeRegexRule] = []
