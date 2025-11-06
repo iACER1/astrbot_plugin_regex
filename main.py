@@ -220,6 +220,11 @@ class RegexCuttingLab(Star):
         if not self._is_enabled():
             return
 
+        # 避免重复处理同一个响应（例如流式输出或多插件链路）
+        if getattr(response, "_regex_cutting_lab_applied", False):
+            return
+        setattr(response, "_regex_cutting_lab_applied", True)
+
         self._ensure_rules()
         if not self._has_ai_scoped_rules:
             return
