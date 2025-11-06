@@ -234,25 +234,42 @@ class RegexCuttingLab(Star):
             )
 
     def _apply_to_result_chain(self, response: LLMResponse) -> bool:
-        """对消息链中的纯文本组件应用正则流水线。"""
+        """对消息链中的纯文本组件应用正则流水线。
+        
+        为避免出现 '123123'、'11' 等重复问题，这里将相邻的 Plain 文本段
+        先合并为一个整体文本再进行一次性替换，最后再写回为单个 Plain。
+        非文本组件的顺序与内容保持不变。
+        """
         chain = response.result_chain
         if not chain:
             return False
 
         mutated = False
         new_components: List[message_components.BaseMessageComponent] = []
+        text_buffer: List[str] = []
 
-        for component in chain.chain:
-            if isinstance(component, message_components.Plain):
-                original_text = component.text or ""
+        def flush_buffer():
+            if text_buffer:
+                original_text = "".join(text_buffer)
                 transformed_text = self._run_pipeline(
                     original_text, target_scope="ai_output"
                 )
                 if transformed_text != original_text:
                     mutated = True
                 new_components.append(message_components.Plain(transformed_text))
+                text_buffer.clear()
+
+        for component in chain.chain:
+            if isinstance(component, message_components.Plain):
+                # 收集连续的纯文本段
+                text_buffer.append(component.text or "")
             else:
+                # 遇到非文本组件，先输出合并后的文本，再输出该组件
+                flush_buffer()
                 new_components.append(component)
+
+        # 处理末尾残留的文本缓冲
+        flush_buffer()
 
         if mutated:
             chain.chain = new_components
