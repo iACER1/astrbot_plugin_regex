@@ -61,6 +61,32 @@ class RegexCuttingLab(Star):
         self._has_user_scoped_rules = False
         self._has_ai_scoped_rules = False
 
+    # 调试辅助：概览链中的 Plain 文本
+    def _outline_chain(self, chain: list[message_components.BaseMessageComponent]) -> list[str]:
+        parts: List[str] = []
+        for comp in chain or []:
+            if isinstance(comp, message_components.Plain):
+                parts.append(comp.text or "")
+            else:
+                parts.append(f"<{comp.__class__.__name__}>")
+        return parts
+
+    # 调试辅助：记录响应当前状态（避免误判来自插件的重复）
+    def _log_resp_state(self, label: str, resp: LLMResponse) -> None:
+        try:
+            chain_outline = []
+            if resp.result_chain and resp.result_chain.chain:
+                chain_outline = self._outline_chain(resp.result_chain.chain)
+            logger.debug(
+                "RegexCuttingLab Debug [%s]: is_chunk=%s | completion_text=%r | chain_outline=%s",
+                label,
+                getattr(resp, "is_chunk", False),
+                resp._completion_text if not resp.result_chain else resp.result_chain.get_plain_text(),
+                chain_outline,
+            )
+        except Exception as e:
+            logger.debug("RegexCuttingLab Debug [%s] snapshot error: %s", label, e)
+
     async def initialize(self) -> None:  # noqa: D401
         """插件加载完成后预编译一次规则。"""
         self._ensure_rules()
@@ -220,7 +246,14 @@ class RegexCuttingLab(Star):
         if not self._is_enabled():
             return
 
-        # 避免重复处理同一个响应（例如流式输出或多插件链路）
+        # 流式分片（is_chunk=True）会多次到达，这里直接跳过，避免对每个分片重复处理导致累加重复。
+        if getattr(response, "is_chunk", False):
+            return
+
+        # 处理前快照
+        self._log_resp_state("before", response)
+
+        # 避免重复处理同一个响应（例如某些链路重复触发）
         if getattr(response, "_regex_cutting_lab_applied", False):
             return
         setattr(response, "_regex_cutting_lab_applied", True)
@@ -231,6 +264,9 @@ class RegexCuttingLab(Star):
 
         chain_changed = self._apply_to_result_chain(response)
         text_changed = False if chain_changed else self._apply_to_completion_text(response)
+
+        # 处理后快照
+        self._log_resp_state("after", response)
 
         if chain_changed or text_changed:
             logger.debug(
@@ -254,6 +290,7 @@ class RegexCuttingLab(Star):
         text_buffer: List[str] = []
 
         def flush_buffer():
+            nonlocal mutated  # 确保变更标记写回外层作用域
             if text_buffer:
                 original_text = "".join(text_buffer)
                 transformed_text = self._run_pipeline(
@@ -278,7 +315,8 @@ class RegexCuttingLab(Star):
 
         if mutated:
             chain.chain = new_components
-            response._completion_text = chain.get_plain_text()
+            # 不再触碰 completion_text，避免在部分管线中“消息链 + completion_text”被同时发送造成重复
+            logger.debug("RegexCuttingLab: result_chain mutated; completion_text untouched.")
 
         return mutated
 
@@ -330,8 +368,32 @@ class RegexCuttingLab(Star):
         """按顺序应用匹配 target_scope 的规则。"""
         result = text
         for rule in self._compiled_rules:
-            if rule.applies_to(target_scope):
+            if not rule.applies_to(target_scope):
+                continue
+            before = result
+            try:
                 result = rule.compiled.sub(rule.replacement, result)
+            finally:
+                # 详细调试：记录每条规则的作用前后文本（截断以避免日志过长）
+                try:
+                    if before != result:
+                        logger.debug(
+                            "RegexCuttingLab: rule[%s#%d scope=%s] changed text: before=%r -> after=%r",
+                            rule.identifier,
+                            rule.order,
+                            rule.scope,
+                            (before[:200] + ("..." if len(before) > 200 else "")),
+                            (result[:200] + ("..." if len(result) > 200 else "")),
+                        )
+                    else:
+                        logger.debug(
+                            "RegexCuttingLab: rule[%s#%d scope=%s] no change.",
+                            rule.identifier,
+                            rule.order,
+                            rule.scope,
+                        )
+                except Exception:
+                    pass
         return result
 
     @staticmethod
