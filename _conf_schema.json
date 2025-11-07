@@ -9,8 +9,8 @@
   "rules_json": {
     "description": "正则规则集（JSON 数组）。编辑右侧代码区以新增/修改/排序规则。",
     "type": "text",
-    "default": "[]",
-    "hint": "请填写 JSON 数组。每项结构：{name, scope(user_input|ai_output|both), pattern, replacement, flags[], order(int), enabled(bool)}。",
+    "default": "[\n  {\n    \"name\": \"将内容替换为123\",\n    \"scope\": \"ai_output\",\n    \"pattern\": \".*\",\n    \"replacement\": \"123\",\n    \"flags\": [\"DOTALL\"],\n    \"order\": 10,\n    \"enabled\": true\n  },\n  {\n    \"name\": \"123替换为1\",\n    \"scope\": \"ai_output\",\n    \"pattern\": \"123\",\n    \"replacement\": \"1\",\n    \"flags\": [],\n    \"order\": 20,\n    \"enabled\": true\n  }\n]",
+    "hint": "默认示例展示了按顺序裁剪输出的两条规则。请填写 JSON 数组，每项结构：{name, scope(user_input|ai_output|both), pattern, replacement, flags[], order(int), enabled(bool)}。删除或修改示例即可自定义规则。",
     "editor_mode": true,
     "editor_language": "json",
     "editor_theme": "vs-light"
