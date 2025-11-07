@@ -370,11 +370,18 @@ class RegexCuttingLab(Star):
         for rule in self._compiled_rules:
             if not rule.applies_to(target_scope):
                 continue
+
             before = result
+
+            def _replacement(match: re.Match[str]) -> str:
+                # 避免零长匹配（例如 .* 在结尾）导致重复替换
+                if match.start() == match.end():
+                    return match.group(0)
+                return match.expand(rule.replacement)
+
             try:
-                result = rule.compiled.sub(rule.replacement, result)
+                result = rule.compiled.sub(_replacement, result)
             finally:
-                # 详细调试：记录每条规则的作用前后文本（截断以避免日志过长）
                 try:
                     if before != result:
                         logger.debug(
@@ -394,6 +401,7 @@ class RegexCuttingLab(Star):
                         )
                 except Exception:
                     pass
+
         return result
 
     @staticmethod
